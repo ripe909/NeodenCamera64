@@ -1,0 +1,11 @@
+    EXPORTS
+
+    img_capture = img_capture @1
+
+    img_init @2
+
+    img_led @3
+
+    img_set @4
+
+    img_setRoi @5
