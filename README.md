@@ -3,4 +3,6 @@ Visual Studio 2019 solution for NeodenCamera DLL for x64.  I have zero experienc
 
 Hopefully I will get something working, with some additional help!
 
+It is currently configured to build as an EXE for debugging.  It is NOT FUNCTIONAL yet!
+
 You will need to download and install the Cypess FX2LP SDK and fix the includes to point to your SDK location 
