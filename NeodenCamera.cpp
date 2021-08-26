@@ -9,16 +9,15 @@
 #undef GetObject
 
 #include "NeodenCamera.h"
-
+#include <time.h>
 
 
 using namespace std;
 
 CCyUSBDevice* USBNeodenCamera;
-
 HANDLE hDevice;
 
-#include <time.h>
+
 void wait(unsigned timeout)
 {
     timeout += clock();
@@ -32,12 +31,6 @@ string narrow(const wstring& wstr)
     return str;
 }
 
-
-
-
-
-
-
 BOOL APIENTRY DllMain(HMODULE hModule,
     DWORD  ul_reason_for_call,
     LPVOID lpReserved
@@ -48,19 +41,15 @@ BOOL APIENTRY DllMain(HMODULE hModule,
     case DLL_PROCESS_ATTACH:
     {
         // Create the CyUSBDevice
-
         USBNeodenCamera = new CCyUSBDevice(0, CYUSBDRV_GUID, true);
 
         int n = USBNeodenCamera->DeviceCount();
 
-
-
         //_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
-
         // for all Cypress devices found
 
-        for (int i = 0; i < n; i++) {
-
+        for (int i = 0; i < n; i++) 
+        {
             USBNeodenCamera->Open(i);
         }
 
@@ -82,31 +71,26 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     LPTSTR    lpCmdLine,
     int       nCmdShow)
 {
-
-
     // Create the CyUSBDevice
-
     USBNeodenCamera = new CCyUSBDevice(0, CYUSBDRV_GUID, true);
-
 
     int n = USBNeodenCamera->DeviceCount();
 
-
     //_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
-
     // for all Cypress devices found
 
-    for (int i = 0; i < 1; i++) {
-
+    for (int i = 0; i < 1; i++) 
+    {
         USBNeodenCamera->Open(i);
 
         // Is it the Neoden?
-        if (USBNeodenCamera->VendorID != 0x0828) {
+        if (USBNeodenCamera->VendorID != 0x0828) 
+        {
             continue;
         }
 
-        std::string model = narrow(std::wstring(USBNeodenCamera->Product));
-        std::string serial = narrow(std::wstring(USBNeodenCamera->SerialNumber));
+        string model = narrow(wstring(USBNeodenCamera->Product));
+        string serial = narrow(wstring(USBNeodenCamera->SerialNumber));
 
         _RPT5(_CRT_WARN, "DID % 04x: % 04x, % s, % s, % s, % s\n", USBNeodenCamera->VendorID, USBNeodenCamera->ProductID, USBNeodenCamera->DeviceName, USBNeodenCamera->DevPath, model.c_str(), serial.c_str());
 
@@ -115,7 +99,6 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         img_init();
         //img_capture(0, buf);
         //delete[] buf;
-
     }
 
 
@@ -128,17 +111,13 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     }
 
     delete USBNeodenCamera;
-
-
     return 0;
 }
 
 BOOL _cdecl img_led(int which_camera, int16_t mode)
 {
-
     DWORD dwBytes = 0;
     UCHAR Address = 0x82;
-
 
     _RPT0(_CRT_WARN, "IMG LED\n");
     BOOL RetVal = (DeviceIoControl(hDevice, IOCTL_ADAPT_ABORT_PIPE, &Address, sizeof(UCHAR), NULL, 0, &dwBytes, NULL) != 0);
