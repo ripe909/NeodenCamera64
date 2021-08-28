@@ -9,3 +9,7 @@
     img_set @4
 
     img_setRoi @5
+
+    img_set_exp @6
+
+    img_set_gain @7
