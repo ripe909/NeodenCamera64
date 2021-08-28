@@ -16,7 +16,8 @@ using namespace std;
 
 CCyUSBDevice* USBNeodenCamera;
 HANDLE hDevice;
-CCyUSBEndPoint* EndPt;
+CCyUSBEndPoint* epControl;
+CCyUSBEndPoint* epBulkIn;
 
 int					QueueSize = 16;
 const int				MAX_QUEUE_SZ = 64;
@@ -60,6 +61,8 @@ BOOL APIENTRY DllMain(HMODULE hModule,
         }
 
         hDevice = USBNeodenCamera->DeviceHandle();
+        epControl = USBNeodenCamera->EndPointOf((ULONG)0x00);
+        epBulkIn = USBNeodenCamera->EndPointOf((ULONG)0x82);
     }
     break;
     case DLL_THREAD_ATTACH:
@@ -85,7 +88,7 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
     //_CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_DEBUG);
     // for all Cypress devices found
 
-    for (int i = 0; i < 1; i++) 
+    for (int i = 0; i < n; i++) 
     {
         USBNeodenCamera->Open(i);
 
@@ -102,7 +105,8 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
         //unsigned char* buf = new unsigned char[1024 * 512]();
         hDevice = USBNeodenCamera->DeviceHandle();
-        EndPt = USBNeodenCamera->EndPointOf((ULONG)0x82);
+        epControl = USBNeodenCamera->EndPointOf((ULONG)0x00);
+        epBulkIn = USBNeodenCamera->EndPointOf((ULONG)0x82);
 
         img_init();
         img_set_speed(1, 2);
@@ -113,15 +117,6 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
         //img_setRoi(1, 212, 240, 800, 600);
         //img_capture(0, buf);
         //delete[] buf;
-    }
-
-
-    while (1)
-    {
-        unsigned char* buf = new unsigned char[1024 * 512]();
-        //img_capture(0, buf);
-        delete[] buf;
-        wait(2000);
     }
 
     delete USBNeodenCamera;
@@ -142,20 +137,20 @@ BOOL _cdecl img_led(int which_camera, int16_t mode)
 static void AbortXferLoop(int pending, PUCHAR* buffers, CCyIsoPktInfo** isoPktInfos, PUCHAR* contexts, OVERLAPPED inOvLap[])
 {
     //EndPt->Abort(); - This is disabled to make sure that while application is doing IO and user unplug the device, this function hang the app.
-    long len = EndPt->MaxPktSize * PPX;
-    EndPt->Abort();
+    long len = epControl->MaxPktSize * PPX;
+    epControl->Abort();
 
     for (int j = 0; j < QueueSize; j++)
     {
         if (j < pending)
         {
-            EndPt->WaitForXfer(&inOvLap[j], TimeOut);
+            epControl->WaitForXfer(&inOvLap[j], TimeOut);
             /*{
                 EndPt->Abort();
                 if (EndPt->LastError == ERROR_IO_PENDING)
                     WaitForSingleObject(inOvLap[j].hEvent,2000);
             }*/
-            EndPt->FinishDataXfer(buffers[j], len, &inOvLap[j], contexts[j]);
+            epControl->FinishDataXfer(buffers[j], len, &inOvLap[j], contexts[j]);
         }
 
         CloseHandle(inOvLap[j].hEvent);
@@ -185,9 +180,9 @@ static void XferInLoop()
     PUCHAR* contexts = new PUCHAR[QueueSize];
     OVERLAPPED		inOvLap[MAX_QUEUE_SZ];
 
-    long len = EndPt->MaxPktSize * PPX; // Each xfer request will get PPX isoc packets
+    long len = epControl->MaxPktSize * PPX; // Each xfer request will get PPX isoc packets
 
-    EndPt->SetXferSize(len);
+    epControl->SetXferSize(len);
 
     // Allocate all the buffers for the queues
     for (i = 0; i < QueueSize; i++)
@@ -204,11 +199,11 @@ static void XferInLoop()
     // Queue-up the first batch of transfer requests
     for (i = 0; i < QueueSize; i++)
     {
-        contexts[i] = EndPt->BeginDataXfer(buffers[i], len, &inOvLap[i]);
-        if (EndPt->NtStatus || EndPt->UsbdStatus) // BeginDataXfer failed
+        contexts[i] = epControl->BeginDataXfer(buffers[i], len, &inOvLap[i]);
+        if (epControl->NtStatus || epControl->UsbdStatus) // BeginDataXfer failed
         {
             //Display(String::Concat("Xfer request rejected. NTSTATUS = ", EndPt->NtStatus.ToString("x")));
-            _RPT1(_CRT_WARN, "Xfer request rejected. NTSTATUS = %s\n", EndPt->NtStatus.ToString("x"));
+            _RPT1(_CRT_WARN, "Xfer request rejected. NTSTATUS = %s\n", epControl->NtStatus.ToString("x"));
             AbortXferLoop(i + 1, buffers, isoPktInfos, contexts, inOvLap);
             return;
         }
@@ -222,21 +217,21 @@ static void XferInLoop()
         long rLen = len;	// Reset this each time through because
         // FinishDataXfer may modify it
 
-        if (!EndPt->WaitForXfer(&inOvLap[i], TimeOut))
+        if (!epControl->WaitForXfer(&inOvLap[i], TimeOut))
         {
-            EndPt->Abort();
-            if (EndPt->LastError == ERROR_IO_PENDING)
+            epControl->Abort();
+            if (epControl->LastError == ERROR_IO_PENDING)
                 WaitForSingleObject(inOvLap[i].hEvent, 2000);
         }
 
-        if (EndPt->Attributes == 1) // ISOC Endpoint
+        if (epControl->Attributes == 1) // ISOC Endpoint
         {
-            if (EndPt->FinishDataXfer(buffers[i], rLen, &inOvLap[i], contexts[i], isoPktInfos[i]))
+            if (epControl->FinishDataXfer(buffers[i], rLen, &inOvLap[i], contexts[i], isoPktInfos[i]))
             {
                 CCyIsoPktInfo* pkts = isoPktInfos[i];
                 for (int j = 0; j < PPX; j++)
                 {
-                    if ((pkts[j].Status == 0) && (pkts[j].Length <= EndPt->MaxPktSize))
+                    if ((pkts[j].Status == 0) && (pkts[j].Length <= epControl->MaxPktSize))
                     {
 
                     }
@@ -253,7 +248,7 @@ static void XferInLoop()
 
         else // BULK Endpoint
         {
-            if (EndPt->FinishDataXfer(buffers[i], rLen, &inOvLap[i], contexts[i]))
+            if (epControl->FinishDataXfer(buffers[i], rLen, &inOvLap[i], contexts[i]))
             {
 
             }
@@ -265,11 +260,11 @@ static void XferInLoop()
 
 
         // Re-submit this queue element to keep the queue full
-        contexts[i] = EndPt->BeginDataXfer(buffers[i], len, &inOvLap[i]);
-        if (EndPt->NtStatus || EndPt->UsbdStatus) // BeginDataXfer failed
+        contexts[i] = epControl->BeginDataXfer(buffers[i], len, &inOvLap[i]);
+        if (epControl->NtStatus || epControl->UsbdStatus) // BeginDataXfer failed
         {
             //Display(String::Concat("Xfer request rejected. NTSTATUS = ", EndPt->NtStatus.ToString("x")));
-            _RPT1(_CRT_WARN, "Xfer request rejected. NTSTATUS = %s\n", EndPt->NtStatus.ToString("x"));
+            _RPT1(_CRT_WARN, "Xfer request rejected. NTSTATUS = %s\n", epControl->NtStatus.ToString("x"));
             AbortXferLoop(QueueSize, buffers, isoPktInfos, contexts, inOvLap);
             return;
         }
@@ -291,14 +286,14 @@ static void XferInLoop()
 
 int _cdecl img_init()
 {
-
     _RPT0(_CRT_WARN, "IMG INIT\n");
 
-    long len = EndPt->MaxPktSize * PPX; // Each xfer request will get PPX isoc packets
+    long len = epControl->MaxPktSize * PPX; // Each xfer request will get PPX isoc packets
 
-    EndPt->SetXferSize(len);
+    epControl->SetXferSize(len);
 
     CCyControlEndPoint* ept = USBNeodenCamera->ControlEndPt;
+
 
     ept->Target = TGT_DEVICE; // byte 0
     ept->ReqType = REQ_VENDOR; // byte 0
@@ -396,9 +391,28 @@ BOOL _cdecl img_set(int which_camera, int speed, int16_t exposure, int16_t gain)
 {
     _RPT0(_CRT_WARN, "IMG SET\n");
 
-    img_set_speed(which_camera, speed);
-    img_set_gain(which_camera, gain);
-    return img_set_exp(which_camera, exposure);
+    BOOL retVal = true;
+
+    if (img_set_speed(which_camera, speed))
+    {
+        if (img_set_gain(which_camera, gain))
+        {
+            if (!img_set_exp(which_camera, exposure))
+            {
+                retVal = false;
+            }
+        }
+        else
+        {
+            retVal = false;
+        }
+    }
+    else
+    {
+        retVal = false;
+    }
+
+    return retVal;
 }
 
 BOOL _cdecl img_set_speed(int which_camera, int16_t speed)
@@ -419,8 +433,8 @@ BOOL _cdecl img_set_speed(int which_camera, int16_t speed)
     ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0x40
-    ept->Write(buf2, bytesToSend);
-    return 0;
+    return ept->Write(buf2, bytesToSend);
+
 }
 
 BOOL _cdecl img_set_exp(int which_camera, int16_t exposure)
@@ -441,8 +455,7 @@ BOOL _cdecl img_set_exp(int which_camera, int16_t exposure)
     ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0x40
-    ept->Write(buf2, bytesToSend);
-    return 0;
+    return ept->Write(buf2, bytesToSend);
 }
 
 BOOL _cdecl img_set_gain(int which_camera, int16_t gain)
@@ -463,8 +476,8 @@ BOOL _cdecl img_set_gain(int which_camera, int16_t gain)
     ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0x40
-    ept->Write(buf2, bytesToSend);
-    return 0;
+    return ept->Write(buf2, bytesToSend);
+
 }
 
 BOOL _cdecl img_get_exp(int which_camera)
@@ -485,8 +498,7 @@ BOOL _cdecl img_get_exp(int which_camera)
     ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0xc0
-    ept->Read(buf2, bytesToSend);
-    return 0;
+    return ept->Read(buf2, bytesToSend);
 }
 
 BOOL _cdecl img_get_gain(int which_camera)
@@ -507,8 +519,7 @@ BOOL _cdecl img_get_gain(int which_camera)
     ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0xc0
-    ept->Read(buf2, bytesToSend);
-    return 0;
+    return ept->Read(buf2, bytesToSend);
 }
 
 
