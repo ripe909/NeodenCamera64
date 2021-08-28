@@ -103,20 +103,23 @@ int APIENTRY _tWinMain(HINSTANCE hInstance,
 
         _RPT5(_CRT_WARN, "DID % 04x: % 04x, % s, % s, % s, % s\n", USBNeodenCamera->VendorID, USBNeodenCamera->ProductID, USBNeodenCamera->DeviceName, USBNeodenCamera->DevPath, model.c_str(), serial.c_str());
 
-        //unsigned char* buf = new unsigned char[1024 * 512]();
+        unsigned char* buf = new unsigned char[1024 * 512]();
         hDevice = USBNeodenCamera->DeviceHandle();
         epControl = USBNeodenCamera->EndPointOf((ULONG)0x00);
         epBulkIn = USBNeodenCamera->EndPointOf((ULONG)0x82);
 
         img_init();
         img_set_speed(1, 2);
-        //img_set_exp(1, 25);
-        //img_set_gain(1, 8);
-        //img_get_exp(1);
-        //img_get_gain(1);
-        //img_setRoi(1, 212, 240, 800, 600);
-        //img_capture(0, buf);
-        //delete[] buf;
+        img_set_exp(1, 25);
+        img_set_gain(1, 8);
+        img_get_exp(1);
+        img_get_gain(1);
+        img_setRoi(1, 212, 240, 800, 600);
+        img_capture(0, buf);
+        for (size_t i = 0; i < (1024 * 512); i++) {
+        _RPT1(_CRT_WARN, "0x%02x ", buf[i]);
+         }
+        delete[] buf;
     }
 
     delete USBNeodenCamera;
@@ -284,13 +287,14 @@ static void XferInLoop()
 
 
 
-int _cdecl img_init()
+int _cdecl img_init_old()
 {
     _RPT0(_CRT_WARN, "IMG INIT\n");
 
     long len = epControl->MaxPktSize * PPX; // Each xfer request will get PPX isoc packets
 
     epControl->SetXferSize(len);
+    wait(500);
 
     CCyControlEndPoint* ept = USBNeodenCamera->ControlEndPt;
 
@@ -300,11 +304,12 @@ int _cdecl img_init()
     ept->ReqCode = 0xbc; // byte 1
     ept->Value = 0x0000; // byte 2,3
     ept->Index = 0x0000; // byte 4,5
+    ept->TimeOut = 2000;
 
     unsigned char  buf2[512];
 
     LONG bytesToSend = 16;  // 38 + 16 = 54
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     buf2[0] = 0x28;
     buf2[1] = 0x74;
@@ -328,6 +333,7 @@ int _cdecl img_init()
 
     // changes byte 0 to 0x40
     ept->Write(buf2, bytesToSend);
+    wait(500);
 
     ept->ReqCode = 0xb6; // byte 1
     ept->Value = 0x0000; // byte 2,3
@@ -335,10 +341,11 @@ int _cdecl img_init()
 
     bytesToSend = 10;  // 38 + 10 = 48
 
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0xc0
     ept->Read(buf2, bytesToSend);
+    wait(500);
 
     ept->ReqCode = 0xbc; // byte 1
     ept->Value = 0x0000; // byte 2,3
@@ -346,10 +353,11 @@ int _cdecl img_init()
 
     bytesToSend = 16;  // 38 + 16 = 54
 
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0xc0
     ept->Read(buf2, bytesToSend);
+    wait(500);
 
 
     ept->ReqCode = 0xb9; // byte 1
@@ -359,28 +367,161 @@ int _cdecl img_init()
     bytesToSend = 0;  // 38 + 0 = 0
     // changes byte 0 to 0x40
     ept->Write(buf2, bytesToSend);
+    wait(500);
 
     return USBNeodenCamera->DeviceCount();
 
 }
 
+int _cdecl img_init()
+{
+    _RPT0(_CRT_WARN, "IMG INIT\n");
+
+    long len = epControl->MaxPktSize * PPX; // Each xfer request will get PPX isoc packets
+    BOOL bXferCompleted = false;
+
+    epControl->SetXferSize(len);
+    wait(500);
+
+    CCyControlEndPoint* cept = USBNeodenCamera->ControlEndPt;
+    CCyBulkEndPoint* bept = USBNeodenCamera->BulkInEndPt;
+
+    if(cept == NULL)
+    {
+        return 0;
+    }
+
+
+    unsigned char  buf2[512];
+    LONG bytesToSend = 0;
+    LONG rLen = 0;
+
+    // *************************************************
+    cept->Target = TGT_DEVICE; // byte 0
+    cept->ReqType = REQ_VENDOR; // byte 0
+    cept->ReqCode = 0xbc; // byte 1
+    cept->Value = 0x0000; // byte 2,3
+    cept->Index = 0x0000; // byte 4,5
+    cept->Direction = DIR_TO_DEVICE; // 0x40
+    cept->TimeOut = 2000;
+
+    bytesToSend = 16;  // 38 + 16 = 54
+
+    buf2[0] = 0x28;
+    buf2[1] = 0x74;
+    buf2[2] = 0x00;
+    buf2[3] = 0x00;
+
+    buf2[4] = 0x38;
+    buf2[5] = 0x18;
+    buf2[6] = 0x00;
+    buf2[7] = 0x00;
+
+    buf2[8] = 0xb0;
+    buf2[9] = 0xd3;
+    buf2[10] = 0xb9;
+    buf2[11] = 0xdb;
+
+    buf2[12] = 0x64;
+    buf2[13] = 0x24;
+    buf2[14] = 0xcf;
+    buf2[15] = 0x77;
+
+    rLen = bytesToSend;
+    bXferCompleted = cept->XferData(buf2, rLen);
+
+    // *************************************************
+    cept->ReqCode = 0xb6; // byte 1
+    cept->Value = 0x0000; // byte 2,3
+    cept->Index = 0x0000; // byte 4,5
+    cept->Direction = DIR_FROM_DEVICE; // 0xc0
+
+    bytesToSend = 10;  // 38 + 10 = 48
+
+    rLen = bytesToSend;
+    bXferCompleted = cept->XferData(buf2, rLen);
+
+    //if (bept != NULL)
+    //{
+    //    rLen = bytesToSend;
+    //    bXferCompleted = bept->XferData(buf2, rLen);
+    //}
+
+    ////_RPT0(_CRT_WARN, "IMG INIT:4\n");
+    //for (size_t i = 0; i < bytesToSend; i++) {
+    //    _RPT2(_CRT_WARN, "i:%d:0x%02x\n", i, buf2[i]);
+    //}
+
+    // *************************************************
+    cept->ReqCode = 0xbc; // byte 1
+    cept->Value = 0x0000; // byte 2,3
+    cept->Index = 0x0000; // byte 4,5
+    cept->Direction = DIR_FROM_DEVICE; // 0xc0
+
+    bytesToSend = 16;  // 38 + 16 = 54
+
+    rLen = bytesToSend;
+    bXferCompleted = cept->XferData(buf2, rLen);
+
+    //if (bept != NULL)
+    //{
+    //    rLen = bytesToSend;
+    //    bXferCompleted = bept->XferData(buf2, rLen);
+    //}
+
+    //for (size_t i = 0; i < bytesToSend; i++) {
+    //    _RPT2(_CRT_WARN, "i:%d:0x%02x\n", i, buf2[i]);
+    //}
+
+    // *************************************************
+    cept->ReqCode = 0xb9; // byte 1
+    cept->Value = 0x0000; // byte 2,3
+    cept->Index = 0x0000; // byte 4,5
+    cept->Direction = DIR_TO_DEVICE; // 0x40
+
+    bytesToSend = 0;  // 38 + 0 = 0
+
+    rLen = bytesToSend;
+    bXferCompleted = cept->XferData(buf2, rLen);
+
+    return USBNeodenCamera->DeviceCount();
+
+}
+
+
 int _cdecl img_capture(int which_camera, unsigned char* pFrameBuffer)
 {
     _RPT0(_CRT_WARN, "IMG CAPTURE\n");
 
-    CCyControlEndPoint* ept = USBNeodenCamera->ControlEndPt;
+    CCyControlEndPoint* cept = USBNeodenCamera->ControlEndPt;
+    CCyBulkEndPoint* bept = USBNeodenCamera->BulkInEndPt;
+    BOOL bXferCompleted = false;
+    unsigned char  buf2[1];
+    LONG bytesToSend = 0;
+    LONG rLen = 0;
+    int retVal = 0;
 
-    ept->Target = TGT_DEVICE;
-    ept->ReqType = REQ_VENDOR;
-    ept->ReqCode = IOCTL_ADAPT_SEND_NON_EP0_TRANSFER;
-    ept->Value = 1;
-    ept->Index = 0;
+    cept->Target = TGT_DEVICE;
+    cept->ReqType = REQ_VENDOR;
+    cept->ReqCode = 0xb8;
+    cept->Value = 0x0000;
+    cept->Index = 0x0000;
+    cept->Direction = DIR_TO_DEVICE; // 0xc0
+
+    bytesToSend = 0;
+    rLen = bytesToSend;
+    bXferCompleted = cept->XferData(buf2, rLen);
 
     //    unsigned char  buf[512];
     //    ZeroMemory(buf, 512);
-    LONG bytesToSend = 1024 * 512;
+    bytesToSend = 1024 * 512;
+    rLen = bytesToSend;
 
-    BOOL retVal = ept->Write(pFrameBuffer, bytesToSend);
+    bXferCompleted = bept->XferData(pFrameBuffer, rLen);
+    if (bXferCompleted)
+    {
+        retVal = 1;
+    }
 
     _RPT1(_CRT_WARN, "capture: %d\n", retVal);
 
@@ -430,7 +571,7 @@ BOOL _cdecl img_set_speed(int which_camera, int16_t speed)
     unsigned char  buf2[1];
 
     LONG bytesToSend = 0;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0x40
     return ept->Write(buf2, bytesToSend);
@@ -452,7 +593,7 @@ BOOL _cdecl img_set_exp(int which_camera, int16_t exposure)
     unsigned char  buf2[1];
 
     LONG bytesToSend = 0;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0x40
     return ept->Write(buf2, bytesToSend);
@@ -473,7 +614,7 @@ BOOL _cdecl img_set_gain(int which_camera, int16_t gain)
     unsigned char  buf2[1];
 
     LONG bytesToSend = 0;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0x40
     return ept->Write(buf2, bytesToSend);
@@ -495,7 +636,7 @@ BOOL _cdecl img_get_exp(int which_camera)
     unsigned char  buf2[64];
 
     LONG bytesToSend = 64;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0xc0
     return ept->Read(buf2, bytesToSend);
@@ -516,7 +657,7 @@ BOOL _cdecl img_get_gain(int which_camera)
     unsigned char  buf2[64];
 
     LONG bytesToSend = 64;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     // changes byte 0 to 0xc0
     return ept->Read(buf2, bytesToSend);
@@ -537,7 +678,7 @@ BOOL _cdecl img_setRoi(int which_camera, short a2, short a3, short w, short h)
     unsigned char  buf2[1];
 
     LONG bytesToSend = 0;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     ept->Value = ((a2 >> 1) << 1) + 12; // byte 2,3
     ept->Index = 0x0001; // byte 4,5
@@ -575,11 +716,10 @@ BOOL _cdecl img_set_lt(int which_camera, int16_t a2, int16_t a3)
     ept->ReqType = REQ_VENDOR; // byte 0
     ept->ReqCode = 0xba; // byte 1
 
-
     unsigned char  buf2[1];
 
     LONG bytesToSend = 0;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+ /*   ZeroMemory(buf2, bytesToSend);*/
 
     ept->Value = ((a2 >> 1) << 1) + 12; // byte 2,3
     ept->Index = 0x0001; // byte 4,5
@@ -604,11 +744,10 @@ BOOL _cdecl img_set_wh(int which_camera, int16_t w, int16_t h)
     ept->ReqType = REQ_VENDOR; // byte 0
     ept->ReqCode = 0xba; // byte 1
 
-
     unsigned char  buf2[1];
 
     LONG bytesToSend = 0;  // 38 + 0 = 38
-    ZeroMemory(buf2, bytesToSend);
+    //ZeroMemory(buf2, bytesToSend);
 
     ept->Value = h - 1; // byte 2,3
     ept->Index = 0x0003; // byte 4,5
