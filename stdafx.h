@@ -13,3 +13,5 @@
 #include <locale>         // std::locale, std::ctype, std::use_facet
 #include <wtypes.h>
 #include <cyioctl.h>
+#include <CyAPI.h>
+#include <dbt.h>

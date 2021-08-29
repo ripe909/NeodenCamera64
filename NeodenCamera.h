@@ -1,8 +1,8 @@
 #pragma once
 
 #pragma once
-#include <CyAPI.h>
-#include <dbt.h>
+//#include <CyAPI.h>
+//#include <dbt.h>
 
 
 __declspec (dllexport) int _cdecl img_capture(int which_camera, unsigned char* pFrameBuffer, long buffSize);
