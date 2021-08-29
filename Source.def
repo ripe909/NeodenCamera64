@@ -1,15 +1,30 @@
     EXPORTS
 
-    img_capture = img_capture @1
+
+    img_led @1
 
     img_init @2
 
-    img_led @3
+    img_capture = img_capture @3
 
     img_set @4
 
-    img_setRoi @5
+    img_set_speed @5
 
     img_set_exp @6
 
     img_set_gain @7
+
+        img_get_exp @8
+
+    img_get_gain @9
+
+    img_setRoi @10
+
+    
+
+
+
+    img_set_lt @11
+
+    img_set_wh @12
